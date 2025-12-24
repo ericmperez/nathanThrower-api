@@ -196,6 +196,10 @@ router.get('/me', authenticate, async (req: AuthRequest, res, next) => {
         id: true,
         email: true,
         name: true,
+        firstName: true,
+        lastName: true,
+        age: true,
+        language: true,
         role: true,
         createdAt: true,
         updatedAt: true,
@@ -215,7 +219,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res, next) => {
 // Update profile
 router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
   try {
-    const { name, email } = req.body;
+    const { name, email, firstName, lastName, age, language, role } = req.body;
     const userId = req.user!.userId;
 
     // Validate input
@@ -224,6 +228,21 @@ router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
     }
     if (email !== undefined && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: 'Invalid email format' });
+    }
+    if (firstName !== undefined && (typeof firstName !== 'string' || firstName.length < 1)) {
+      return res.status(400).json({ error: 'First name must be at least 1 character' });
+    }
+    if (lastName !== undefined && (typeof lastName !== 'string' || lastName.length < 1)) {
+      return res.status(400).json({ error: 'Last name must be at least 1 character' });
+    }
+    if (age !== undefined && (typeof age !== 'number' || age < 1 || age > 120)) {
+      return res.status(400).json({ error: 'Age must be between 1 and 120' });
+    }
+    if (language !== undefined && !['en', 'es'].includes(language)) {
+      return res.status(400).json({ error: 'Language must be "en" or "es"' });
+    }
+    if (role !== undefined && !['user', 'admin', 'nathan', 'dad', 'coach', 'player'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' });
     }
 
     // Check if email is already taken by another user
@@ -241,9 +260,22 @@ router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
     }
 
     // Update user
-    const updateData: { name?: string; email?: string } = {};
+    const updateData: {
+      name?: string;
+      email?: string;
+      firstName?: string;
+      lastName?: string;
+      age?: number;
+      language?: string;
+      role?: string;
+    } = {};
     if (name !== undefined) updateData.name = name;
     if (email !== undefined) updateData.email = email;
+    if (firstName !== undefined) updateData.firstName = firstName;
+    if (lastName !== undefined) updateData.lastName = lastName;
+    if (age !== undefined) updateData.age = age;
+    if (language !== undefined) updateData.language = language;
+    if (role !== undefined) updateData.role = role;
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
@@ -252,6 +284,10 @@ router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
         id: true,
         email: true,
         name: true,
+        firstName: true,
+        lastName: true,
+        age: true,
+        language: true,
         role: true,
         createdAt: true,
         updatedAt: true,

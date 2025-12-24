@@ -12,7 +12,11 @@ model User {
   email     String   @unique
   password  String
   name      String
-  role      String   @default("user") // user, admin, nathan
+  firstName String?
+  lastName  String?
+  age       Int?
+  language  String?  @default("en") // en, es
+  role      String   @default("user") // user, admin, nathan, dad, coach, player
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

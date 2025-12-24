@@ -77,6 +77,187 @@ router.get('/users', async (req: AuthRequest, res, next) => {
   }
 });
 
+// Get user activity log
+router.get('/users/:userId/activity', async (req: AuthRequest, res, next) => {
+  try {
+    const { userId } = req.params;
+
+    // Verify user exists
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true, createdAt: true, updatedAt: true },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const activities: Array<{
+      type: string;
+      description: string;
+      timestamp: Date;
+      metadata?: any;
+    }> = [];
+
+    // Account creation
+    activities.push({
+      type: 'account_created',
+      description: 'Account created',
+      timestamp: user.createdAt,
+    });
+
+    // Profile updates
+    if (user.updatedAt && user.updatedAt.getTime() !== user.createdAt.getTime()) {
+      activities.push({
+        type: 'profile_updated',
+        description: 'Profile updated',
+        timestamp: user.updatedAt,
+      });
+    }
+
+    // Subscription history
+    const subscription = await prisma.subscription.findUnique({
+      where: { userId },
+    });
+
+    if (subscription) {
+      activities.push({
+        type: 'subscription_created',
+        description: `Subscription created: ${subscription.plan} (${subscription.status})`,
+        timestamp: subscription.createdAt,
+        metadata: { plan: subscription.plan, status: subscription.status },
+      });
+
+      if (subscription.updatedAt && subscription.updatedAt.getTime() !== subscription.createdAt.getTime()) {
+        activities.push({
+          type: 'subscription_updated',
+          description: `Subscription updated: ${subscription.status}`,
+          timestamp: subscription.updatedAt,
+          metadata: { status: subscription.status, plan: subscription.plan },
+        });
+      }
+    }
+
+    // Video analyses
+    const analyses = await prisma.analysis.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 50, // Limit to recent 50
+    });
+
+    analyses.forEach((analysis) => {
+      activities.push({
+        type: 'analysis_submitted',
+        description: `Video analysis submitted: ${analysis.pitchType} pitch (${analysis.goal})`,
+        timestamp: analysis.createdAt,
+        metadata: { status: analysis.status, pitchType: analysis.pitchType },
+      });
+
+      if (analysis.status === 'completed' && analysis.updatedAt) {
+        activities.push({
+          type: 'analysis_completed',
+          description: `Video analysis completed: ${analysis.pitchType} pitch`,
+          timestamp: analysis.updatedAt,
+          metadata: { pitchType: analysis.pitchType },
+        });
+      }
+    });
+
+    // Messages sent
+    const messagesSent = await prisma.message.findMany({
+      where: { senderId: userId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+
+    messagesSent.forEach((msg) => {
+      activities.push({
+        type: 'message_sent',
+        description: msg.hasVideo ? 'Message sent with video' : 'Message sent',
+        timestamp: msg.createdAt,
+      });
+    });
+
+    // Pitch count sessions
+    const pitchSessions = await prisma.pitchCountSession.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+      include: {
+        pitches: {
+          select: { id: true },
+        },
+      },
+    });
+
+    pitchSessions.forEach((session) => {
+      activities.push({
+        type: 'pitch_session',
+        description: `${session.sessionType} session: ${session.pitches.length} pitches`,
+        timestamp: session.createdAt,
+        metadata: { sessionType: session.sessionType, pitchCount: session.pitches.length },
+      });
+    });
+
+    // Course purchases
+    const purchases = await prisma.purchase.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        course: {
+          select: { title: true },
+        },
+      },
+    });
+
+    purchases.forEach((purchase) => {
+      activities.push({
+        type: 'course_purchased',
+        description: `Course purchased: ${purchase.course.title}`,
+        timestamp: purchase.createdAt,
+        metadata: { status: purchase.status, courseTitle: purchase.course.title },
+      });
+    });
+
+    // Recent login activity (from refresh tokens)
+    // Group by date to avoid duplicate entries for same day
+    const recentTokens = await prisma.refreshToken.findMany({
+      where: { userId, isRevoked: false },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    // Group by date (same day = one login entry)
+    const loginDates = new Set<string>();
+    recentTokens.forEach((token) => {
+      const dateKey = token.createdAt.toISOString().split('T')[0]; // YYYY-MM-DD
+      if (!loginDates.has(dateKey)) {
+        loginDates.add(dateKey);
+        activities.push({
+          type: 'login',
+          description: 'User logged in',
+          timestamp: token.createdAt,
+          metadata: { deviceId: token.deviceId },
+        });
+      }
+    });
+
+
+    // Sort all activities by timestamp (most recent first)
+    activities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+    res.json({
+      userId,
+      userName: user.name,
+      userEmail: user.email,
+      activities: activities.slice(0, 100), // Limit to 100 most recent
+      totalActivities: activities.length,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ==================== Courses ====================
 
 // Create course

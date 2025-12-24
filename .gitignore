@@ -26,4 +26,5 @@ npm-debug.log*
 Thumbs.db
 
 # Prisma
-prisma/migrations/
+# Note: migrations/ should be committed to version control
+# Only ignore migration lock files if any
