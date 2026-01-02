@@ -20,9 +20,31 @@ export interface RealtimeEvent {
  * Initialize WebSocket server
  */
 export function initWebSocket(server: HttpServer) {
+  // Use same CORS configuration as main app
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+    : (process.env.NODE_ENV === 'production' ? [] : ['http://localhost:3000', 'http://localhost:3001']);
+
   io = new SocketIOServer(server, {
     cors: {
-      origin: process.env.CORS_ORIGIN?.split(',') || '*',
+      origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps)
+        if (!origin) {
+          return callback(null, true);
+        }
+        
+        // In development, allow localhost origins
+        if (process.env.NODE_ENV !== 'production' && (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'))) {
+          return callback(null, true);
+        }
+        
+        // Check against allowed origins
+        if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error(`Not allowed by CORS policy`));
+        }
+      },
       methods: ['GET', 'POST'],
       credentials: true,
     },
@@ -178,4 +200,26 @@ export function broadcastUserUpdate(userId: string, user: any) {
   broadcastToUser(userId, event);
   broadcastToAdmins(event);
 }
+
+/**
+ * Broadcast a new user registration event
+ */
+export function broadcastUserCreated(user: any) {
+  const event: RealtimeEvent = {
+    type: 'user:new',
+    payload: {
+      userId: user.id,
+      userName: user.name,
+      userEmail: user.email,
+      userRole: user.role,
+      createdAt: user.createdAt,
+    },
+    timestamp: new Date().toISOString(),
+  };
+
+  // Only notify admins (not the new user themselves)
+  broadcastToAdmins(event);
+}
+
+
 

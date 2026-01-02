@@ -3,6 +3,7 @@ import { CreateCourseSchema, UpdateCourseSchema, CreateLessonSchema } from '../l
 import prisma from '../lib/prisma';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
 import { broadcastSubscriptionUpdate, broadcastUserUpdate } from '../lib/websocket';
+import bcrypt from 'bcryptjs';
 
 const router = Router();
 
@@ -51,6 +52,52 @@ router.get('/stats', async (req: AuthRequest, res, next) => {
 
 // ==================== Users ====================
 
+// Create new user (subscriber)
+router.post('/users', async (req: AuthRequest, res, next) => {
+  try {
+    const { name, email, password } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email, and password are required' });
+    }
+
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ error: 'User with this email already exists' });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        role: 'user', // Default role for new subscribers
+        emailVerified: true, // Admin-created users are pre-verified
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+      },
+    });
+
+    res.status(201).json(user);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get all users
 router.get('/users', async (req: AuthRequest, res, next) => {
   try {
     const users = await prisma.user.findMany({
@@ -58,7 +105,12 @@ router.get('/users', async (req: AuthRequest, res, next) => {
         id: true,
         email: true,
         name: true,
+        firstName: true,
+        lastName: true,
+        age: true,
+        language: true,
         role: true,
+        profilePicture: true,
         createdAt: true,
         subscription: {
           select: {

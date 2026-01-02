@@ -10,15 +10,32 @@ datasource db {
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
-  password  String
+  password  String?  // Nullable for OAuth users
   name      String
   firstName String?
   lastName  String?
   age       Int?
   language  String?  @default("en") // en, es
-  role      String   @default("user") // user, admin, nathan, dad, coach, player
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  role          String   @default("user") // user, admin, nathan, dad, coach, player
+  goals         String[] @default([]) // Training goals: velo, command, injury_prevention, mechanics, endurance
+  profilePicture String?  // URL to profile picture in cloud storage
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Authentication & Security fields
+  emailVerified           Boolean?  @default(false)
+  emailVerificationToken  String?
+  emailVerificationExpiry DateTime?
+  passwordResetToken      String?
+  passwordResetExpiry     DateTime?
+  failedLoginAttempts     Int       @default(0)
+  lockedUntil             DateTime?
+
+  // OAuth fields
+  oauthProvider String?  // 'apple', 'google', null for email/password
+  oauthId       String?  // Provider's user ID (e.g., Apple sub, Google sub)
+  
+  @@index([oauthProvider, oauthId])
 
   // Push notification tokens
   pushTokens PushToken[]
@@ -38,7 +55,12 @@ model User {
   // Pitch counting
   pitchCountSessions PitchCountSession[]
 
+  // Audit logs
+  authAuditLogs AuthAuditLog[]
+
   @@index([email])
+  @@index([emailVerificationToken])
+  @@index([passwordResetToken])
 }
 
 model Subscription {
@@ -350,4 +372,24 @@ model RestDayGuideline {
 
   @@index([minAge, maxAge])
   @@index([isActive])
+}
+
+// ==========================================
+// AUTHENTICATION AUDIT LOG
+// ==========================================
+
+model AuthAuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String   // login, logout, password_change, password_reset, email_verification, failed_login, account_locked
+  ipAddress String?
+  userAgent String?
+  metadata  Json?    // Additional context (deviceId, etc.)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@index([createdAt])
 }

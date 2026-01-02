@@ -78,3 +78,4 @@ In Railway/Render:
 - [ ] API server can connect to database
 - [ ] CORS is configured (`ALLOWED_ORIGINS`)
 
+

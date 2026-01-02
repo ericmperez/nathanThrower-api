@@ -68,3 +68,5 @@ async function testS3Connection() {
 }
 
 testS3Connection();
+
+

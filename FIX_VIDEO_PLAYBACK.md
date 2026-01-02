@@ -66,3 +66,5 @@ The video should now play! If it still doesn't work, check the browser console (
 - CORS changes can take a few seconds to propagate
 - Make sure your bucket's public access settings allow the videos to be read
 - The video URL format should be: `https://pitchcoach-videos.s3.us-east-2.amazonaws.com/videos/...`
+
+

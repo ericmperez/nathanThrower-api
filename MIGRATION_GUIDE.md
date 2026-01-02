@@ -105,3 +105,4 @@ Use `prisma migrate resolve --rolled-back <migration_name>` to mark a failed mig
 ### Database already migrated:
 If your database is already up-to-date, use `prisma migrate resolve --applied <migration_name>` to mark migrations as applied without running them.
 
+

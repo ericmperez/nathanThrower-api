@@ -30,7 +30,8 @@ describe('Module Name', () => {
       body: {},
       params: {},
       query: {},
-      user: undefined, // For AuthRequest
+      // user property should be added when testing AuthRequest endpoints
+      // Example: (mockRequest as any).user = { userId: 'test-id', email: 'test@test.com', role: 'user' };
     };
     mockResponse = {
       status: jest.fn().mockReturnThis(),

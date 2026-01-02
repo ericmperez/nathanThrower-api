@@ -203,3 +203,5 @@ You should get back a presigned URL that you can use to upload videos.
 - Use IAM policies with least privilege (don't use full S3 access in production)
 - Consider using environment-specific buckets (dev/staging/prod)
 - Set up lifecycle policies to delete old videos after a certain period
+
+

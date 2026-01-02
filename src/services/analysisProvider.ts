@@ -1,4 +1,5 @@
 import { CoachingReport, AnalysisMetrics, PitchType, Handedness, Goal } from '../lib/shared';
+import { aiService } from './aiService';
 
 /**
  * Analysis Provider Interface
@@ -29,7 +30,7 @@ export class MockAnalysisProvider implements IAnalysisProvider {
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
     const metrics = this.generateMockMetrics(metadata);
-    const report = this.generateMockReport(metrics, metadata);
+    const report = await this.generateMockReport(metrics, metadata);
 
     return { metrics, report };
   }
@@ -56,7 +57,26 @@ export class MockAnalysisProvider implements IAnalysisProvider {
     return base;
   }
 
-  private generateMockReport(metrics: AnalysisMetrics, metadata: AnalysisMetadata): CoachingReport {
+  private async generateMockReport(metrics: AnalysisMetrics, metadata: AnalysisMetadata): Promise<CoachingReport> {
+    // Attempt to get AI-generated content first
+    const aiData = await aiService.generateCoachingReport(metrics, {
+      pitchType: metadata.pitchType,
+      handedness: metadata.handedness,
+      goal: metadata.goal,
+    });
+
+    if (aiData) {
+      const routine = this.generateRoutine(aiData.top_cues, metadata);
+      return {
+        summary: aiData.summary,
+        top_cues: aiData.top_cues,
+        metrics,
+        routine,
+        risk_flags: aiData.risk_flags,
+      };
+    }
+
+    // Fallback to static mock logic if AI is unavailable
     const cues: any[] = [];
     const riskFlags: any[] = [];
 
