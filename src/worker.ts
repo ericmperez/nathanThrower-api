@@ -9,8 +9,15 @@ import os from 'os';
 
 dotenv.config();
 
+// Worker requires Redis - exit gracefully if not configured
+if (!process.env.REDIS_HOST) {
+  console.warn('⚠️ Worker not started - REDIS_HOST not configured');
+  console.warn('📝 Background job processing disabled. Analysis jobs will be skipped.');
+  process.exit(0);
+}
+
 const connection = {
-  host: process.env.REDIS_HOST || 'localhost',
+  host: process.env.REDIS_HOST,
   port: parseInt(process.env.REDIS_PORT || '6379'),
 };
 
