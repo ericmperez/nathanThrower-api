@@ -26,24 +26,10 @@ const PORT = process.env.PORT || 4000;
 initWebSocket(httpServer);
 
 // Middleware
-// CORS configuration - restrict to allowed origins in production
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
-  : (process.env.NODE_ENV === 'production' ? [] : ['http://localhost:3000', 'http://localhost:3001']);
-
+// CORS configuration - allow all origins for now (mobile apps + web dashboard)
+// TODO: Restrict to specific origins in production when domains are finalized
 app.use(cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, Postman, etc.)
-    if (!origin) {
-      return callback(null, true);
-    }
-    
-    if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error(`Not allowed by CORS policy. Origin: ${origin} not in allowed list: ${allowedOrigins.join(', ')}`));
-    }
-  },
+  origin: true, // Allow all origins
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
