@@ -144,6 +144,9 @@ router.get('/me', authenticate, async (req: AuthRequest, res, next) => {
         language: true,
         role: true,
         goals: true,
+        endGoal: true,
+        currentVelocity: true,
+        targetVelocity: true,
         profilePicture: true,
         emailVerified: true,
         createdAt: true,
@@ -213,7 +216,7 @@ router.post('/profile/picture/presign', authenticate, async (req: AuthRequest, r
 // Update profile
 router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
   try {
-    const { name, email, firstName, lastName, age, language, role, goals, profilePicture } = req.body;
+    const { name, email, firstName, lastName, age, language, role, goals, profilePicture, endGoal, currentVelocity, targetVelocity } = req.body;
     const userId = req.user!.userId;
 
     // Validate input
@@ -243,6 +246,16 @@ router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
       if (!Array.isArray(goals) || !goals.every((g: any) => typeof g === 'string' && validGoals.includes(g))) {
         return res.status(400).json({ error: `Goals must be an array containing only: ${validGoals.join(', ')}` });
       }
+    }
+    const validEndGoals = ['play_college', 'go_pro', 'improve_for_fun', 'make_team', 'stay_healthy'];
+    if (endGoal !== undefined && !validEndGoals.includes(endGoal)) {
+      return res.status(400).json({ error: `End goal must be one of: ${validEndGoals.join(', ')}` });
+    }
+    if (currentVelocity !== undefined && (typeof currentVelocity !== 'number' || currentVelocity < 30 || currentVelocity > 110)) {
+      return res.status(400).json({ error: 'Current velocity must be between 30 and 110 MPH' });
+    }
+    if (targetVelocity !== undefined && (typeof targetVelocity !== 'number' || targetVelocity < 30 || targetVelocity > 110)) {
+      return res.status(400).json({ error: 'Target velocity must be between 30 and 110 MPH' });
     }
 
     // Check if email is already taken by another user
@@ -283,6 +296,9 @@ router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
       role?: string;
       goals?: string[];
       profilePicture?: string;
+      endGoal?: string;
+      currentVelocity?: number;
+      targetVelocity?: number;
     } = {};
     if (name !== undefined) updateData.name = name;
     if (email !== undefined) updateData.email = email;
@@ -293,6 +309,9 @@ router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
     if (role !== undefined) updateData.role = role;
     if (goals !== undefined) updateData.goals = goals;
     if (profilePicture !== undefined) updateData.profilePicture = profilePicture;
+    if (endGoal !== undefined) updateData.endGoal = endGoal;
+    if (currentVelocity !== undefined) updateData.currentVelocity = currentVelocity;
+    if (targetVelocity !== undefined) updateData.targetVelocity = targetVelocity;
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
@@ -307,6 +326,9 @@ router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
         language: true,
         role: true,
         goals: true,
+        endGoal: true,
+        currentVelocity: true,
+        targetVelocity: true,
         profilePicture: true,
         emailVerified: true,
         createdAt: true,

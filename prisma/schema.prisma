@@ -18,6 +18,9 @@ model User {
   language  String?  @default("en") // en, es
   role          String   @default("user") // user, admin, nathan, dad, coach, player
   goals         String[] @default([]) // Training goals: velo, command, injury_prevention, mechanics, endurance
+  endGoal       String?  // Long-term goal: play_college, go_pro, improve_for_fun, make_team, stay_healthy
+  currentVelocity Int?   // Current velocity in MPH
+  targetVelocity  Int?   // One-year target velocity in MPH
   profilePicture String?  // URL to profile picture in cloud storage
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -62,6 +65,9 @@ model User {
   workoutLogs WorkoutLog[]
   streak      UserStreak?
 
+  // Training Programs
+  programEnrollments UserProgramEnrollment[]
+
   @@index([email])
   @@index([emailVerificationToken])
   @@index([passwordResetToken])
@@ -70,7 +76,8 @@ model User {
 model Subscription {
   id              String    @id @default(cuid())
   userId          String    @unique
-  plan            String    // monthly, yearly
+  tier            String    @default("free") // free, premium, pro, elite
+  plan            String    // weekly, quarterly, monthly, yearly
   status          String    @default("active") // active, cancelled, expired
   provider        String    // stripe, apple, google, mock
   providerSubId   String?   // External subscription ID
@@ -83,6 +90,7 @@ model Subscription {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([status])
+  @@index([tier])
   @@index([currentPeriodEnd])
 }
 
@@ -434,4 +442,82 @@ model AuthAuditLog {
   @@index([userId, createdAt])
   @@index([action, createdAt])
   @@index([createdAt])
+}
+
+// ==========================================
+// TRAINING PROGRAMS
+// ==========================================
+
+model TrainingProgram {
+  id            String   @id @default(cuid())
+  title         String
+  description   String   @db.Text
+  category      String   // velocity, mechanics, injury_prevention, endurance
+  difficulty    String   // beginner, intermediate, advanced
+  durationWeeks Int      @default(4)
+  thumbnailUrl  String?
+  isActive      Boolean  @default(true)
+  isPremium     Boolean  @default(true) // Requires Premium+ subscription
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  weeks       TrainingProgramWeek[]
+  enrollments UserProgramEnrollment[]
+
+  @@index([category])
+  @@index([isActive])
+  @@index([isPremium])
+}
+
+model TrainingProgramWeek {
+  id          String   @id @default(cuid())
+  programId   String
+  weekNumber  Int
+  title       String
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  program TrainingProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  days    TrainingProgramDay[]
+
+  @@unique([programId, weekNumber])
+  @@index([programId])
+}
+
+model TrainingProgramDay {
+  id        String   @id @default(cuid())
+  weekId    String
+  dayNumber Int      // 1-7
+  title     String
+  drillIds  String[] // Array of Drill IDs
+  notes     String?  @db.Text
+  restDay   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  week TrainingProgramWeek @relation(fields: [weekId], references: [id], onDelete: Cascade)
+
+  @@unique([weekId, dayNumber])
+  @@index([weekId])
+}
+
+model UserProgramEnrollment {
+  id            String   @id @default(cuid())
+  userId        String
+  programId     String
+  startDate     DateTime @default(now())
+  currentWeek   Int      @default(1)
+  currentDay    Int      @default(1)
+  status        String   @default("active") // active, completed, paused, cancelled
+  completedDays String[] // Array of completed day IDs
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  program TrainingProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, programId])
+  @@index([userId, status])
+  @@index([programId])
 }
