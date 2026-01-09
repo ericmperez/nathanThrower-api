@@ -3,6 +3,7 @@ import { CreateAnalysisSchema } from '../lib/shared';
 import prisma from '../lib/prisma';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { addAnalysisJob } from '../jobs/analysisQueue';
+import { broadcastAnalysisCreated } from '../lib/websocket';
 
 const router = Router();
 
@@ -60,6 +61,9 @@ router.post('/', authenticate, async (req: AuthRequest, res, next) => {
 
     // Queue analysis job
     await addAnalysisJob(analysis.id);
+
+    // Broadcast real-time event
+    broadcastAnalysisCreated(userId, analysis);
 
     res.status(201).json({
       id: analysis.id,

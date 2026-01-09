@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import prisma from '../lib/prisma';
+import { broadcastPitchCountSession } from '../lib/websocket';
 
 const router = Router();
 
@@ -114,6 +115,9 @@ router.post('/sessions', async (req: AuthRequest, res, next) => {
       },
     });
 
+    // Broadcast real-time event
+    broadcastPitchCountSession(userId, session, 'new');
+
     res.status(201).json({ session });
   } catch (error: any) {
     // Better error handling for common issues
@@ -187,10 +191,14 @@ router.post('/sessions/:id/pitches', async (req: AuthRequest, res, next) => {
     });
 
     // Update session updatedAt
-    await prisma.pitchCountSession.update({
+    const updatedSession = await prisma.pitchCountSession.update({
       where: { id },
       data: { updatedAt: new Date() },
+      include: { pitches: true },
     });
+
+    // Broadcast real-time event
+    broadcastPitchCountSession(userId, updatedSession, 'update');
 
     res.status(201).json({
       pitch,

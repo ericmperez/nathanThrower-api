@@ -6,6 +6,7 @@ import { getObject } from './lib/s3';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { broadcastAnalysisUpdate } from './lib/websocket';
 
 dotenv.config();
 
@@ -78,13 +79,16 @@ const worker = new Worker(
       });
 
       // Update analysis status
-      await prisma.analysis.update({
+      const completedAnalysis = await prisma.analysis.update({
         where: { id: analysisId },
         data: {
           status: 'completed',
           updatedAt: new Date(),
         },
       });
+
+      // Broadcast real-time update
+      broadcastAnalysisUpdate(analysis.userId, completedAnalysis);
 
       // Clean up temp file
       if (fs.existsSync(tempVideoPath)) {
@@ -96,13 +100,16 @@ const worker = new Worker(
       console.error(`❌ Analysis ${analysisId} failed:`, error);
 
       // Update analysis with error
-      await prisma.analysis.update({
+      const failedAnalysis = await prisma.analysis.update({
         where: { id: analysisId },
         data: {
           status: 'failed',
           errorMessage: error.message || 'Unknown error occurred',
         },
       });
+
+      // Broadcast real-time update for failure
+      broadcastAnalysisUpdate(failedAnalysis.userId, failedAnalysis);
 
       throw error;
     }

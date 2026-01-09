@@ -58,6 +58,10 @@ model User {
   // Audit logs
   authAuditLogs AuthAuditLog[]
 
+  // Workout & Streaks
+  workoutLogs WorkoutLog[]
+  streak      UserStreak?
+
   @@index([email])
   @@index([emailVerificationToken])
   @@index([passwordResetToken])
@@ -372,6 +376,44 @@ model RestDayGuideline {
 
   @@index([minAge, maxAge])
   @@index([isActive])
+}
+
+// ==========================================
+// WORKOUT ACTIVITY & STREAKS
+// ==========================================
+
+model WorkoutLog {
+  id          String   @id @default(cuid())
+  userId      String
+  courseId    String?  // Optional - can be null for general activity
+  lessonId    String?  // Optional - specific lesson completed
+  activityType String  // "lesson_complete", "course_complete", "drill", "pitch_session"
+  date        DateTime @default(now()) // The date of the activity
+  duration    Int?     // Duration in seconds (optional)
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date, courseId, lessonId, activityType]) // Prevent duplicate logs for same activity
+  @@index([userId, date])
+  @@index([userId, createdAt])
+}
+
+model UserStreak {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  currentStreak   Int      @default(0)
+  longestStreak   Int      @default(0)
+  lastActivityDate DateTime?
+  streakStartDate DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // ==========================================

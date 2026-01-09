@@ -193,8 +193,8 @@ router.get('/subscription-status', authenticate, async (req: AuthRequest, res: R
         });
 
         const isActive = subscription
-            && subscription.status === 'active'
-            && new Date() <= subscription.currentPeriodEnd;
+            ? subscription.status === 'active' && new Date() <= subscription.currentPeriodEnd
+            : false;
 
         res.json({
             isSubscribed: isActive,

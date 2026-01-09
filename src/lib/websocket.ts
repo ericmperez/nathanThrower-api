@@ -221,5 +221,62 @@ export function broadcastUserCreated(user: any) {
   broadcastToAdmins(event);
 }
 
+/**
+ * Broadcast a new analysis event
+ */
+export function broadcastAnalysisCreated(userId: string, analysis: any) {
+  const event: RealtimeEvent = {
+    type: 'analysis:new',
+    payload: {
+      userId,
+      analysisId: analysis.id,
+      status: analysis.status,
+      createdAt: analysis.createdAt,
+    },
+    timestamp: new Date().toISOString(),
+  };
+
+  broadcastToUser(userId, event);
+  broadcastToAdmins(event);
+}
+
+/**
+ * Broadcast an analysis update event
+ */
+export function broadcastAnalysisUpdate(userId: string, analysis: any) {
+  const event: RealtimeEvent = {
+    type: 'analysis:update',
+    payload: {
+      userId,
+      analysisId: analysis.id,
+      status: analysis.status,
+      updatedAt: analysis.updatedAt,
+    },
+    timestamp: new Date().toISOString(),
+  };
+
+  broadcastToUser(userId, event);
+  broadcastToAdmins(event);
+}
+
+/**
+ * Broadcast a pitch count session event
+ */
+export function broadcastPitchCountSession(userId: string, session: any, eventType: 'new' | 'update') {
+  const event: RealtimeEvent = {
+    type: `pitchCount:${eventType}`,
+    payload: {
+      userId,
+      sessionId: session.id,
+      sessionType: session.sessionType,
+      pitchCount: session.pitches?.length || 0,
+    },
+    timestamp: new Date().toISOString(),
+  };
+
+  broadcastToUser(userId, event);
+  broadcastToAdmins(event);
+}
+
 
 
