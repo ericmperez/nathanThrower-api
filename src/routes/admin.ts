@@ -111,6 +111,9 @@ router.get('/users', async (req: AuthRequest, res, next) => {
         language: true,
         role: true,
         profilePicture: true,
+        endGoal: true,
+        currentVelocity: true,
+        targetVelocity: true,
         createdAt: true,
         subscription: {
           select: {

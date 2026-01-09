@@ -7,31 +7,67 @@ import { broadcastAnalysisCreated } from '../lib/websocket';
 
 const router = Router();
 
+// Analysis limits by subscription tier
+// -1 means unlimited
+const ANALYSIS_LIMITS: Record<string, number> = {
+  free: 2,      // 2 per week
+  premium: 1,   // 1 per week
+  pro: -1,      // Unlimited
+  elite: -1,    // Unlimited
+};
+
 // Create new analysis
 router.post('/', authenticate, async (req: AuthRequest, res, next) => {
   try {
     const data = CreateAnalysisSchema.parse(req.body);
     const userId = req.user!.userId;
 
-    // Rate limiting: check recent analyses (MVP: 2 per week for free users)
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-
-    const recentCount = await prisma.analysis.count({
-      where: {
-        userId,
-        createdAt: { gte: oneWeekAgo },
-      },
+    // Get user with subscription to determine tier
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { subscription: true },
     });
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    const limit = user?.role === 'admin' ? 1000 : 2;
+    // Determine subscription tier
+    const isSubscriptionActive = user?.subscription?.status === 'active'
+      && user?.subscription?.currentPeriodEnd
+      && new Date(user.subscription.currentPeriodEnd) > new Date();
 
-    if (recentCount >= limit) {
-      return res.status(429).json({
-        error: 'Rate limit exceeded',
-        message: `Free users can analyze ${limit} videos per week. Upgrade for unlimited analyses.`,
+    const tier = isSubscriptionActive ? (user?.subscription?.tier || 'free') : 'free';
+
+    // Admin override
+    const isAdmin = user?.role === 'admin' || user?.role === 'nathan';
+    const limit = isAdmin ? 1000 : (ANALYSIS_LIMITS[tier] ?? ANALYSIS_LIMITS.free);
+
+    // Skip rate limiting for unlimited tiers
+    if (limit > 0) {
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+      const recentCount = await prisma.analysis.count({
+        where: {
+          userId,
+          createdAt: { gte: oneWeekAgo },
+        },
       });
+
+      if (recentCount >= limit) {
+        const tierNames: Record<string, string> = {
+          free: 'Free',
+          premium: 'Premium',
+        };
+        const upgradeMessage = tier === 'premium'
+          ? 'Upgrade to Pro for unlimited analyses.'
+          : 'Upgrade for more video analyses.';
+
+        return res.status(429).json({
+          error: 'Rate limit exceeded',
+          message: `${tierNames[tier] || 'Your'} plan allows ${limit} video${limit > 1 ? 's' : ''} per week. ${upgradeMessage}`,
+          limit,
+          used: recentCount,
+          tier,
+        });
+      }
     }
 
     // Create video asset

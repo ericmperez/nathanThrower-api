@@ -14,6 +14,7 @@ import referralsRoutes from './routes/referrals';
 import notificationsRoutes from './routes/notifications';
 import pitchCountRoutes from './routes/pitchCount';
 import workoutsRoutes from './routes/workouts';
+import trainingProgramsRoutes from './routes/trainingPrograms';
 import { errorHandler } from './middleware/errorHandler';
 import { initWebSocket } from './lib/websocket';
 
@@ -55,6 +56,7 @@ app.use('/api/referrals', referralsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/pitch-count', pitchCountRoutes);
 app.use('/api/workouts', workoutsRoutes);
+app.use('/api/training-programs', trainingProgramsRoutes);
 
 // Error handler
 app.use(errorHandler);
