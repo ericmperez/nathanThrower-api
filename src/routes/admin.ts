@@ -150,6 +150,7 @@ router.get('/users', async (req: AuthRequest, res, next) => {
         subscription: {
           select: {
             plan: true,
+            tier: true,
             status: true,
             currentPeriodEnd: true,
           },
@@ -189,6 +190,7 @@ router.get('/users/:userId', async (req: AuthRequest, res, next) => {
         subscription: {
           select: {
             plan: true,
+            tier: true,
             status: true,
             currentPeriodEnd: true,
           },
