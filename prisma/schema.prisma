@@ -117,18 +117,56 @@ model Message {
   content    String   @db.Text
   isRead     Boolean  @default(false)
   createdAt  DateTime @default(now())
-  
+
   // Video attachment fields (optional)
   videoUrl   String?  // Public URL for video
   videoKey   String?  // S3 key for video
   hasVideo   Boolean  @default(false)
 
-  sender   User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  // Image attachment fields (optional)
+  imageUrl   String?  // Public URL for image
+  imageKey   String?  // S3 key for image
+  hasImage   Boolean  @default(false)
+
+  // Thumbnail for video preview
+  thumbnailUrl String?
+
+  sender    User              @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver  User              @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  reactions MessageReaction[]
+  bookmarks MessageBookmark[]
 
   @@index([senderId, createdAt])
   @@index([receiverId, createdAt])
   @@index([receiverId, isRead])
+  @@index([content(ops: raw("gin_trgm_ops"))], type: Gin) // For text search
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String   // The emoji character (e.g., "🔥", "👍", "❤️", "💪")
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji]) // One reaction per emoji per user per message
+  @@index([messageId])
+  @@index([userId])
+}
+
+model MessageBookmark {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId]) // One bookmark per user per message
+  @@index([userId])
+  @@index([messageId])
 }
 
 model RefreshToken {

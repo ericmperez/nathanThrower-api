@@ -151,6 +151,14 @@ router.get('/me', authenticate, async (req: AuthRequest, res, next) => {
         emailVerified: true,
         createdAt: true,
         updatedAt: true,
+        subscription: {
+          select: {
+            plan: true,
+            status: true,
+            currentPeriodEnd: true,
+            provider: true,
+          },
+        },
       },
     });
 
