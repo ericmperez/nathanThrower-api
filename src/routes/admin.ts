@@ -57,10 +57,21 @@ router.get('/stats', async (req: AuthRequest, res, next) => {
 // Create new user (subscriber)
 router.post('/users', async (req: AuthRequest, res, next) => {
   try {
-    const { name, email, password } = req.body;
+    const {
+      email,
+      password,
+      firstName,
+      lastName,
+      age,
+      role: requestedRole,
+    } = req.body;
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'Name, email, and password are required' });
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    if (!firstName) {
+      return res.status(400).json({ error: 'First name is required' });
     }
 
     // Check if user already exists
@@ -75,19 +86,38 @@ router.post('/users', async (req: AuthRequest, res, next) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
+    // Build full name from firstName and lastName
+    const fullName = lastName ? `${firstName} ${lastName}` : firstName;
+
+    // Determine role (only super admins can set admin role)
+    let finalRole = 'user';
+    if (requestedRole === 'admin') {
+      const SUPER_ADMIN_EMAILS = ['nathan@nathanthrower.com', 'eric.perez.pr@gmail.com'];
+      const isSuperAdmin = req.user?.role === 'nathan' || SUPER_ADMIN_EMAILS.includes(req.user?.email || '');
+      if (isSuperAdmin) {
+        finalRole = 'admin';
+      }
+    }
+
+    // Create user with profile data
     const user = await prisma.user.create({
       data: {
-        name,
+        name: fullName,
+        firstName,
+        lastName: lastName || null,
+        age: age ? parseInt(age, 10) : null,
         email,
         password: hashedPassword,
-        role: 'user', // Default role for new subscribers
+        role: finalRole,
         emailVerified: true, // Admin-created users are pre-verified
       },
       select: {
         id: true,
         email: true,
         name: true,
+        firstName: true,
+        lastName: true,
+        age: true,
         role: true,
         createdAt: true,
       },
