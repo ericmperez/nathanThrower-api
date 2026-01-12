@@ -732,11 +732,17 @@ router.delete('/rest-day-guidelines/:id', async (req: AuthRequest, res, next) =>
 
 // ==================== Subscriptions ====================
 
-// Grant premium subscription to a user
+// Grant subscription to a user
 router.post('/users/:userId/subscription', async (req: AuthRequest, res, next) => {
   try {
     const { userId } = req.params;
-    const { plan = 'monthly', months = 1 } = req.body;
+    const { plan = 'monthly', tier = 'premium', months = 1 } = req.body;
+
+    // Validate tier
+    const validTiers = ['premium', 'superplayer'];
+    if (!validTiers.includes(tier)) {
+      return res.status(400).json({ error: 'Invalid tier. Allowed: premium, superplayer' });
+    }
 
     // Find user
     const user = await prisma.user.findUnique({
@@ -760,6 +766,7 @@ router.post('/users/:userId/subscription', async (req: AuthRequest, res, next) =
       where: { userId: user.id },
       update: {
         plan,
+        tier,
         status: 'active',
         provider: 'admin',
         currentPeriodStart: new Date(),
@@ -769,6 +776,7 @@ router.post('/users/:userId/subscription', async (req: AuthRequest, res, next) =
       create: {
         userId: user.id,
         plan,
+        tier,
         status: 'active',
         provider: 'admin',
         currentPeriodStart: new Date(),
@@ -781,10 +789,11 @@ router.post('/users/:userId/subscription', async (req: AuthRequest, res, next) =
     broadcastSubscriptionUpdate(userId, subscription);
     broadcastUserUpdate(userId, user);
 
+    const tierLabel = tier === 'superplayer' ? 'Superplayer' : 'Premium';
     res.json({
       success: true,
       subscription,
-      message: `Premium subscription granted to ${user.email}`,
+      message: `${tierLabel} subscription granted to ${user.email}`,
     });
   } catch (error) {
     next(error);
