@@ -144,6 +144,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res, next) => {
         language: true,
         role: true,
         goals: true,
+        handedness: true,
         endGoal: true,
         currentVelocity: true,
         targetVelocity: true,
@@ -224,7 +225,7 @@ router.post('/profile/picture/presign', authenticate, async (req: AuthRequest, r
 // Update profile
 router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
   try {
-    const { name, email, firstName, lastName, age, language, role, goals, profilePicture, endGoal, currentVelocity, targetVelocity } = req.body;
+    const { name, email, firstName, lastName, age, language, role, goals, profilePicture, endGoal, currentVelocity, targetVelocity, handedness } = req.body;
     const userId = req.user!.userId;
 
     // Validate input
@@ -264,6 +265,9 @@ router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
     }
     if (targetVelocity !== undefined && (typeof targetVelocity !== 'number' || targetVelocity < 30 || targetVelocity > 110)) {
       return res.status(400).json({ error: 'Target velocity must be between 30 and 110 MPH' });
+    }
+    if (handedness !== undefined && !['R', 'L'].includes(handedness)) {
+      return res.status(400).json({ error: 'Handedness must be "R" or "L"' });
     }
 
     // Check if email is already taken by another user
@@ -307,6 +311,7 @@ router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
       endGoal?: string;
       currentVelocity?: number;
       targetVelocity?: number;
+      handedness?: string;
     } = {};
     if (name !== undefined) updateData.name = name;
     if (email !== undefined) updateData.email = email;
@@ -320,6 +325,7 @@ router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
     if (endGoal !== undefined) updateData.endGoal = endGoal;
     if (currentVelocity !== undefined) updateData.currentVelocity = currentVelocity;
     if (targetVelocity !== undefined) updateData.targetVelocity = targetVelocity;
+    if (handedness !== undefined) updateData.handedness = handedness;
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
@@ -334,6 +340,7 @@ router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
         language: true,
         role: true,
         goals: true,
+        handedness: true,
         endGoal: true,
         currentVelocity: true,
         targetVelocity: true,
