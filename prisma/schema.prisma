@@ -521,3 +521,23 @@ model UserProgramEnrollment {
   @@index([userId, status])
   @@index([programId])
 }
+
+// ==========================================
+// CONTENT (TIP OF THE WEEK, etc.)
+// ==========================================
+
+model TipOfTheWeek {
+  id           String    @id @default(cuid())
+  title        String
+  description  String?   @db.Text
+  videoUrl     String    // URL to video on CDN
+  thumbnailUrl String?   // Optional thumbnail image
+  publishedAt  DateTime  @default(now())
+  expiresAt    DateTime? // Optional expiration date
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([isActive, publishedAt])
+  @@index([expiresAt])
+}

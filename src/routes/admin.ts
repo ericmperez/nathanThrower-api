@@ -3,6 +3,8 @@ import { CreateCourseSchema, UpdateCourseSchema, CreateLessonSchema } from '../l
 import prisma from '../lib/prisma';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
 import { broadcastSubscriptionUpdate, broadcastUserUpdate } from '../lib/websocket';
+import { generatePresignedUploadUrl } from '../lib/s3';
+import { generateFirebaseUploadUrl } from '../lib/firebase';
 import bcrypt from 'bcryptjs';
 
 const router = Router();
@@ -731,6 +733,123 @@ router.delete('/users/:userId/subscription', async (req: AuthRequest, res, next)
     }
 
     res.json({ success: true, message: 'Subscription cancelled' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ==================== Tip of the Week ====================
+
+// Get presigned URL for uploading tip of the week video (Firebase Storage)
+router.post('/tips-of-the-week/upload', async (req: AuthRequest, res, next) => {
+  try {
+    const { filename, contentType } = req.body;
+
+    if (!filename || !contentType) {
+      return res.status(400).json({ error: 'filename and contentType are required' });
+    }
+
+    // Validate content type
+    const allowedTypes = ['video/mp4', 'video/quicktime', 'video/x-m4v'];
+    if (!allowedTypes.includes(contentType)) {
+      return res.status(400).json({
+        error: 'Invalid content type. Allowed: MP4, MOV, M4V',
+        allowedTypes
+      });
+    }
+
+    // Generate unique path for the video
+    const timestamp = Date.now();
+    const sanitizedFilename = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const filePath = `content/tips/${timestamp}-${sanitizedFilename}`;
+
+    const { uploadUrl, publicUrl } = await generateFirebaseUploadUrl(filePath, contentType);
+
+    res.json({
+      uploadUrl,
+      videoUrl: publicUrl,
+      filePath,
+      expiresIn: 900, // 15 minutes
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// List all tips
+router.get('/tips-of-the-week', async (req: AuthRequest, res, next) => {
+  try {
+    const tips = await prisma.tipOfTheWeek.findMany({
+      orderBy: { publishedAt: 'desc' },
+    });
+
+    res.json({ tips });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Create tip
+router.post('/tips-of-the-week', async (req: AuthRequest, res, next) => {
+  try {
+    const { title, description, videoUrl, thumbnailUrl, publishedAt, expiresAt, isActive } = req.body;
+
+    if (!title || !videoUrl) {
+      return res.status(400).json({ error: 'Title and videoUrl are required' });
+    }
+
+    const tip = await prisma.tipOfTheWeek.create({
+      data: {
+        title,
+        description,
+        videoUrl,
+        thumbnailUrl,
+        publishedAt: publishedAt ? new Date(publishedAt) : new Date(),
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        isActive: isActive !== undefined ? isActive : true,
+      },
+    });
+
+    res.status(201).json({ tip });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Update tip
+router.patch('/tips-of-the-week/:id', async (req: AuthRequest, res, next) => {
+  try {
+    const { id } = req.params;
+    const { title, description, videoUrl, thumbnailUrl, publishedAt, expiresAt, isActive } = req.body;
+
+    const updateData: any = {};
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
+    if (videoUrl !== undefined) updateData.videoUrl = videoUrl;
+    if (thumbnailUrl !== undefined) updateData.thumbnailUrl = thumbnailUrl;
+    if (publishedAt !== undefined) updateData.publishedAt = new Date(publishedAt);
+    if (expiresAt !== undefined) updateData.expiresAt = expiresAt ? new Date(expiresAt) : null;
+    if (isActive !== undefined) updateData.isActive = isActive;
+
+    const tip = await prisma.tipOfTheWeek.update({
+      where: { id },
+      data: updateData,
+    });
+
+    res.json({ tip });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete tip
+router.delete('/tips-of-the-week/:id', async (req: AuthRequest, res, next) => {
+  try {
+    const { id } = req.params;
+
+    await prisma.tipOfTheWeek.delete({ where: { id } });
+
+    res.status(204).send();
   } catch (error) {
     next(error);
   }
