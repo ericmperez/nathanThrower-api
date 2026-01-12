@@ -27,3 +27,21 @@ export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction
   }
   next();
 }
+
+// Super admins can create/manage other admins
+// Only nathan@nathanthrower.com and eric.perez.pr@gmail.com have this privilege
+const SUPER_ADMIN_EMAILS = [
+  'nathan@nathanthrower.com',
+  'eric.perez.pr@gmail.com',
+];
+
+export function requireSuperAdmin(req: AuthRequest, res: Response, next: NextFunction) {
+  const userEmail = req.user?.email;
+  const userRole = req.user?.role;
+
+  // Must be nathan role OR be in the super admin list
+  if (userRole !== 'nathan' && !SUPER_ADMIN_EMAILS.includes(userEmail || '')) {
+    return res.status(403).json({ error: 'Super admin access required' });
+  }
+  next();
+}

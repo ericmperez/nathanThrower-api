@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { CreateCourseSchema, UpdateCourseSchema, CreateLessonSchema } from '../lib/shared';
 import prisma from '../lib/prisma';
-import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
+import { authenticate, requireAdmin, requireSuperAdmin, AuthRequest } from '../middleware/auth';
 import { broadcastSubscriptionUpdate, broadcastUserUpdate } from '../lib/websocket';
 import { generatePresignedUploadUrl } from '../lib/s3';
 import { generateFirebaseUploadUrl } from '../lib/firebase';
@@ -351,6 +351,63 @@ router.get('/users/:userId/activity', async (req: AuthRequest, res, next) => {
       userEmail: user.email,
       activities: activities.slice(0, 100), // Limit to 100 most recent
       totalActivities: activities.length,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ==================== User Role Management ====================
+
+// Update user role (Super Admin only - nathan@nathanthrower.com and eric.perez.pr@gmail.com)
+router.patch('/users/:userId/role', requireSuperAdmin, async (req: AuthRequest, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { role } = req.body;
+
+    // Validate role
+    const validRoles = ['user', 'admin'];
+    if (!role || !validRoles.includes(role)) {
+      return res.status(400).json({
+        error: 'Invalid role. Allowed roles: user, admin',
+        allowedRoles: validRoles
+      });
+    }
+
+    // Find user
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Prevent changing nathan's role
+    if (user.role === 'nathan') {
+      return res.status(403).json({ error: 'Cannot modify Nathan\'s role' });
+    }
+
+    // Update user role
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { role },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+      },
+    });
+
+    // Broadcast update
+    broadcastUserUpdate(userId, updatedUser);
+
+    res.json({
+      success: true,
+      user: updatedUser,
+      message: `User ${user.email} role updated to ${role}`,
     });
   } catch (error) {
     next(error);

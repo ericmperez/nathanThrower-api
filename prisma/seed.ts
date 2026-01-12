@@ -51,6 +51,20 @@ async function main() {
   });
   console.log('✅ Nathan Thrower account created:', nathan.email);
 
+  // Create Eric Perez (super admin)
+  const ericPassword = await bcrypt.hash(process.env.ERIC_PASSWORD || 'eric1234', 10);
+  const eric = await prisma.user.upsert({
+    where: { email: 'eric.perez.pr@gmail.com' },
+    update: { role: 'admin' }, // Ensure role is admin on re-seed
+    create: {
+      email: 'eric.perez.pr@gmail.com',
+      password: ericPassword,
+      name: 'Eric Perez',
+      role: 'admin',
+    },
+  });
+  console.log('✅ Eric Perez (super admin) created:', eric.email);
+
   // Create a test subscriber (for testing messaging)
   const subscriberPassword = await bcrypt.hash('subscriber1234', 10);
   const subscriber = await prisma.user.upsert({
