@@ -18,6 +18,7 @@ model User {
   language  String?  @default("en") // en, es
   role          String   @default("user") // user, admin, nathan, dad, coach, player
   goals         String[] @default([]) // Training goals: velo, command, injury_prevention, mechanics, endurance
+  handedness    String?  // R (right), L (left)
   endGoal       String?  // Long-term goal: play_college, go_pro, improve_for_fun, make_team, stay_healthy
   currentVelocity Int?   // Current velocity in MPH
   targetVelocity  Int?   // One-year target velocity in MPH
@@ -139,7 +140,6 @@ model Message {
   @@index([senderId, createdAt])
   @@index([receiverId, createdAt])
   @@index([receiverId, isRead])
-  @@index([content(ops: raw("gin_trgm_ops"))], type: Gin) // For text search
 }
 
 model MessageReaction {
