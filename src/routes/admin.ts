@@ -132,6 +132,48 @@ router.get('/users', async (req: AuthRequest, res, next) => {
   }
 });
 
+// Get single user by ID
+router.get('/users/:userId', async (req: AuthRequest, res, next) => {
+  try {
+    const { userId } = req.params;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        firstName: true,
+        lastName: true,
+        age: true,
+        language: true,
+        role: true,
+        profilePicture: true,
+        endGoal: true,
+        currentVelocity: true,
+        targetVelocity: true,
+        goals: true,
+        createdAt: true,
+        subscription: {
+          select: {
+            plan: true,
+            status: true,
+            currentPeriodEnd: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ user });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get user activity log
 router.get('/users/:userId/activity', async (req: AuthRequest, res, next) => {
   try {
