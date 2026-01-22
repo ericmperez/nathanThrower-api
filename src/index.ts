@@ -17,9 +17,7 @@ import pitchCountRoutes from './routes/pitchCount';
 import workoutsRoutes from './routes/workouts';
 import trainingProgramsRoutes from './routes/trainingPrograms';
 import contentRoutes from './routes/content';
-import pawnsRoutes from './routes/pawns';
 import auditLogsRoutes from './routes/auditLogs';
-import ebayRoutes from './routes/ebay';
 import { errorHandler } from './middleware/errorHandler';
 import { ipAddressMiddleware } from './middleware/ipAddress';
 import { initWebSocket } from './lib/websocket';
@@ -88,9 +86,7 @@ app.use('/api/pitch-count', pitchCountRoutes);
 app.use('/api/workouts', workoutsRoutes);
 app.use('/api/training-programs', trainingProgramsRoutes);
 app.use('/api/content', contentRoutes);
-app.use('/api/pawns', pawnsRoutes);
 app.use('/api/audit-logs', auditLogsRoutes);
-app.use('/api/ebay', ebayRoutes);
 
 // Error handler
 app.use(errorHandler);
