@@ -165,7 +165,7 @@ router.get('/users', async (req: AuthRequest, res, next) => {
   }
 });
 
-// Get single user by ID
+// Get single user by ID with all related data
 router.get('/users/:userId', async (req: AuthRequest, res, next) => {
   try {
     const { userId } = req.params;
@@ -178,21 +178,197 @@ router.get('/users/:userId', async (req: AuthRequest, res, next) => {
         name: true,
         firstName: true,
         lastName: true,
+        dateOfBirth: true,
         age: true,
         language: true,
         role: true,
+        handedness: true,
         profilePicture: true,
         endGoal: true,
         currentVelocity: true,
         targetVelocity: true,
         goals: true,
         createdAt: true,
+        updatedAt: true,
         subscription: {
           select: {
+            id: true,
             plan: true,
             tier: true,
             status: true,
+            provider: true,
+            currentPeriodStart: true,
             currentPeriodEnd: true,
+            cancelAtPeriodEnd: true,
+            createdAt: true,
+          },
+        },
+        // Pitch count sessions (last 20)
+        pitchCountSessions: {
+          take: 20,
+          orderBy: { date: 'desc' },
+          select: {
+            id: true,
+            sessionType: true,
+            age: true,
+            date: true,
+            notes: true,
+            pitches: {
+              select: {
+                id: true,
+                pitchType: true,
+                result: true,
+              },
+            },
+          },
+        },
+        // Workout logs (last 30)
+        workoutLogs: {
+          take: 30,
+          orderBy: { date: 'desc' },
+          select: {
+            id: true,
+            activityType: true,
+            date: true,
+            duration: true,
+            notes: true,
+          },
+        },
+        // Streak data
+        streak: {
+          select: {
+            currentStreak: true,
+            longestStreak: true,
+            lastActivityDate: true,
+            streakStartDate: true,
+          },
+        },
+        // Training program enrollments
+        programEnrollments: {
+          select: {
+            id: true,
+            currentWeek: true,
+            currentDay: true,
+            status: true,
+            startDate: true,
+            completedDays: true,
+            program: {
+              select: {
+                id: true,
+                title: true,
+                category: true,
+                difficulty: true,
+                durationWeeks: true,
+              },
+            },
+          },
+        },
+        // Video analyses (last 20)
+        analyses: {
+          take: 20,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            pitchType: true,
+            handedness: true,
+            goal: true,
+            status: true,
+            createdAt: true,
+            videoAsset: {
+              select: {
+                url: true,
+                thumbnailUrl: true,
+              },
+            },
+          },
+        },
+        // Messages sent (last 50)
+        sentMessages: {
+          take: 50,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            content: true,
+            createdAt: true,
+            isRead: true,
+            hasVideo: true,
+            hasImage: true,
+            receiver: {
+              select: {
+                id: true,
+                name: true,
+                role: true,
+              },
+            },
+          },
+        },
+        // Messages received (last 50)
+        receivedMessages: {
+          take: 50,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            content: true,
+            createdAt: true,
+            isRead: true,
+            hasVideo: true,
+            hasImage: true,
+            sender: {
+              select: {
+                id: true,
+                name: true,
+                role: true,
+              },
+            },
+          },
+        },
+        // Course purchases
+        purchases: {
+          select: {
+            id: true,
+            status: true,
+            provider: true,
+            createdAt: true,
+            course: {
+              select: {
+                id: true,
+                title: true,
+                price: true,
+              },
+            },
+          },
+        },
+        // Referral code and referrals made
+        referralCode: {
+          select: {
+            code: true,
+            isActive: true,
+            referrals: {
+              select: {
+                id: true,
+                status: true,
+                createdAt: true,
+                referred: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        // Who referred this user
+        referredBy: {
+          select: {
+            referrer: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
           },
         },
       },
@@ -202,7 +378,17 @@ router.get('/users/:userId', async (req: AuthRequest, res, next) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json({ user });
+    // Calculate age from dateOfBirth if available
+    const calculatedAge = user.dateOfBirth
+      ? Math.floor((Date.now() - new Date(user.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+      : user.age;
+
+    res.json({
+      user: {
+        ...user,
+        calculatedAge,
+      }
+    });
   } catch (error) {
     next(error);
   }

@@ -8,6 +8,7 @@ import videosRoutes from './routes/videos';
 import analysesRoutes from './routes/analyses';
 import coursesRoutes from './routes/courses';
 import messagesRoutes from './routes/messages';
+import chatsRoutes from './routes/chats';
 import adminRoutes from './routes/admin';
 import webhooksRoutes from './routes/webhooks';
 import referralsRoutes from './routes/referrals';
@@ -16,6 +17,7 @@ import pitchCountRoutes from './routes/pitchCount';
 import workoutsRoutes from './routes/workouts';
 import trainingProgramsRoutes from './routes/trainingPrograms';
 import contentRoutes from './routes/content';
+import pawnsRoutes from './routes/pawns';
 import { errorHandler } from './middleware/errorHandler';
 import { initWebSocket } from './lib/websocket';
 
@@ -29,10 +31,32 @@ const PORT = process.env.PORT || 4000;
 initWebSocket(httpServer);
 
 // Middleware
-// CORS configuration - allow all origins for now (mobile apps + web dashboard)
-// TODO: Restrict to specific origins in production when domains are finalized
+// CORS configuration
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+  : [];
+
 app.use(cors({
-  origin: true, // Allow all origins
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    // In development, allow localhost
+    if (process.env.NODE_ENV !== 'production') {
+      if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+        return callback(null, true);
+      }
+    }
+
+    // Check against allowed origins
+    if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -51,6 +75,7 @@ app.use('/api/videos', videosRoutes);
 app.use('/api/analyses', analysesRoutes);
 app.use('/api/courses', coursesRoutes);
 app.use('/api/messages', messagesRoutes);
+app.use('/api/chats', chatsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/webhooks', webhooksRoutes);
 app.use('/api/referrals', referralsRoutes);
@@ -59,6 +84,7 @@ app.use('/api/pitch-count', pitchCountRoutes);
 app.use('/api/workouts', workoutsRoutes);
 app.use('/api/training-programs', trainingProgramsRoutes);
 app.use('/api/content', contentRoutes);
+app.use('/api/pawns', pawnsRoutes);
 
 // Error handler
 app.use(errorHandler);

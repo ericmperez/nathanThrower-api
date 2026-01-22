@@ -225,7 +225,7 @@ router.post('/profile/picture/presign', authenticate, async (req: AuthRequest, r
 // Update profile
 router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
   try {
-    const { name, email, firstName, lastName, age, language, role, goals, profilePicture, endGoal, currentVelocity, targetVelocity, handedness } = req.body;
+    const { name, email, firstName, lastName, age, dateOfBirth, language, role, goals, profilePicture, endGoal, currentVelocity, targetVelocity, handedness } = req.body;
     const userId = req.user!.userId;
 
     // Validate input
@@ -243,6 +243,23 @@ router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
     }
     if (age !== undefined && (typeof age !== 'number' || age < 1 || age > 120)) {
       return res.status(400).json({ error: 'Age must be between 1 and 120' });
+    }
+    // Validate dateOfBirth - should be a valid ISO date string
+    let parsedDateOfBirth: Date | undefined;
+    if (dateOfBirth !== undefined) {
+      if (typeof dateOfBirth !== 'string') {
+        return res.status(400).json({ error: 'Date of birth must be an ISO date string' });
+      }
+      parsedDateOfBirth = new Date(dateOfBirth);
+      if (isNaN(parsedDateOfBirth.getTime())) {
+        return res.status(400).json({ error: 'Invalid date of birth format' });
+      }
+      // Validate reasonable age range (1-100 years old)
+      const today = new Date();
+      const age = today.getFullYear() - parsedDateOfBirth.getFullYear();
+      if (age < 1 || age > 100) {
+        return res.status(400).json({ error: 'Date of birth must result in age between 1 and 100' });
+      }
     }
     if (language !== undefined && !['en', 'es'].includes(language)) {
       return res.status(400).json({ error: 'Language must be "en" or "es"' });
@@ -303,6 +320,7 @@ router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
       email?: string;
       firstName?: string;
       lastName?: string;
+      dateOfBirth?: Date;
       age?: number;
       language?: string;
       role?: string;
@@ -317,6 +335,7 @@ router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
     if (email !== undefined) updateData.email = email;
     if (firstName !== undefined) updateData.firstName = firstName;
     if (lastName !== undefined) updateData.lastName = lastName;
+    if (parsedDateOfBirth !== undefined) updateData.dateOfBirth = parsedDateOfBirth;
     if (age !== undefined) updateData.age = age;
     if (language !== undefined) updateData.language = language;
     if (role !== undefined) updateData.role = role;
@@ -336,6 +355,7 @@ router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
         name: true,
         firstName: true,
         lastName: true,
+        dateOfBirth: true,
         age: true,
         language: true,
         role: true,
@@ -351,7 +371,15 @@ router.patch('/profile', authenticate, async (req: AuthRequest, res, next) => {
       },
     });
 
-    res.json(updatedUser);
+    // Calculate age from dateOfBirth if available
+    const responseUser = {
+      ...updatedUser,
+      calculatedAge: updatedUser.dateOfBirth
+        ? Math.floor((Date.now() - new Date(updatedUser.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+        : updatedUser.age,
+    };
+
+    res.json(responseUser);
   } catch (error) {
     next(error);
   }
@@ -684,6 +712,46 @@ router.post('/oauth/apple', authRateLimit, async (req, res, next) => {
     if (error.message.includes('verification failed')) {
       return res.status(401).json({ error: 'Invalid Apple token' });
     }
+    next(error);
+  }
+});
+
+// Search users for chat (authenticated)
+router.get('/users/search', authenticate, async (req: AuthRequest, res, next) => {
+  try {
+    const { q, limit = '20' } = req.query;
+    const userId = req.user!.userId;
+
+    if (!q || typeof q !== 'string' || q.length < 2) {
+      return res.status(400).json({ error: 'Search query must be at least 2 characters' });
+    }
+
+    const maxLimit = Math.min(parseInt(limit as string) || 20, 50);
+
+    const users = await prisma.user.findMany({
+      where: {
+        AND: [
+          { id: { not: userId } }, // Exclude current user
+          {
+            OR: [
+              { name: { contains: q, mode: 'insensitive' } },
+              { email: { contains: q, mode: 'insensitive' } },
+            ],
+          },
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        profilePicture: true,
+      },
+      take: maxLimit,
+      orderBy: { name: 'asc' },
+    });
+
+    res.json({ users });
+  } catch (error) {
     next(error);
   }
 });

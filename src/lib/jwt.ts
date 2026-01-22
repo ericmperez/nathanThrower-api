@@ -13,10 +13,13 @@ if (isProduction && (!JWT_SECRET || JWT_SECRET.length < 32)) {
 }
 
 if (!JWT_SECRET) {
-  console.warn('⚠️  WARNING: JWT_SECRET not set. Using fallback secret. This is NOT secure for production!');
+  if (isProduction) {
+    throw new Error('JWT_SECRET must be set in production');
+  }
+  console.warn('⚠️  WARNING: JWT_SECRET not set. Set JWT_SECRET environment variable before deploying to production.');
 }
 
-const SECRET = JWT_SECRET || 'fallback-secret-change-me';
+const SECRET = JWT_SECRET || 'dev-only-secret-do-not-use-in-production';
 const ACCESS_TOKEN_EXPIRY = '15m'; // Short-lived access token
 const REFRESH_TOKEN_EXPIRY_DAYS = 30;
 

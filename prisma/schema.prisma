@@ -12,10 +12,11 @@ model User {
   email     String   @unique
   password  String?  // Nullable for OAuth users
   name      String
-  firstName String?
-  lastName  String?
-  age       Int?
-  language  String?  @default("en") // en, es
+  firstName   String?
+  lastName    String?
+  dateOfBirth DateTime?  // Store DOB instead of age - age is calculated
+  age         Int?       // @deprecated - use dateOfBirth instead, kept for backwards compatibility
+  language    String?    @default("en") // en, es
   role          String   @default("user") // user, admin, nathan, dad, coach, player
   goals         String[] @default([]) // Training goals: velo, command, injury_prevention, mechanics, endurance
   handedness    String?  // R (right), L (left)
@@ -68,6 +69,13 @@ model User {
 
   // Training Programs
   programEnrollments UserProgramEnrollment[]
+
+  // Real-time Chat System
+  createdChats        Chat[]               @relation("ChatCreator")
+  chatParticipants    ChatParticipant[]
+  sentChatMessages    ChatMessage[]        @relation("ChatMessageSender")
+  chatMessageReceipts ChatMessageReceipt[]
+  presence            UserPresence?
 
   @@index([email])
   @@index([emailVerificationToken])
@@ -558,6 +566,211 @@ model UserProgramEnrollment {
   @@unique([userId, programId])
   @@index([userId, status])
   @@index([programId])
+}
+
+// ==========================================
+// REAL-TIME CHAT SYSTEM
+// ==========================================
+
+enum ChatType {
+  DIRECT
+  GROUP
+}
+
+enum ChatMessageStatus {
+  SENT
+  DELIVERED
+  READ
+}
+
+model Chat {
+  id          String    @id @default(cuid())
+  type        ChatType  @default(DIRECT)
+  name        String?   // For group chats
+  createdById String    @map("created_by_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  createdBy    User              @relation("ChatCreator", fields: [createdById], references: [id])
+  participants ChatParticipant[]
+  messages     ChatMessage[]
+
+  @@map("chats")
+}
+
+model ChatParticipant {
+  id         String    @id @default(cuid())
+  chatId     String    @map("chat_id")
+  userId     String    @map("user_id")
+  joinedAt   DateTime  @default(now()) @map("joined_at")
+  leftAt     DateTime? @map("left_at")
+  lastReadAt DateTime? @map("last_read_at")
+  isAdmin    Boolean   @default(false) @map("is_admin")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([chatId, userId])
+  @@index([userId])
+  @@map("chat_participants")
+}
+
+model ChatMessage {
+  id        String            @id @default(cuid())
+  chatId    String            @map("chat_id")
+  senderId  String            @map("sender_id")
+  content   String            @db.Text
+  status    ChatMessageStatus @default(SENT)
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+  deletedAt DateTime?         @map("deleted_at")
+
+  chat     Chat                 @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender   User                 @relation("ChatMessageSender", fields: [senderId], references: [id])
+  receipts ChatMessageReceipt[]
+
+  @@index([chatId, createdAt])
+  @@index([senderId])
+  @@map("chat_messages")
+}
+
+model ChatMessageReceipt {
+  id        String   @id @default(cuid())
+  messageId String   @map("message_id")
+  userId    String   @map("user_id")
+  readAt    DateTime @default(now()) @map("read_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@map("chat_message_receipts")
+}
+
+model UserPresence {
+  id         String   @id @default(cuid())
+  userId     String   @unique @map("user_id")
+  isOnline   Boolean  @default(false) @map("is_online")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+  socketId   String?  @map("socket_id")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_presences")
+}
+
+// ==========================================
+// PAWN LOAN SYSTEM
+// ==========================================
+
+enum LoanStatus {
+  ACTIVE
+  REDEEMED
+  FORFEITED
+  EXTENDED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  CHECK
+}
+
+enum CycleOption {
+  A    // New cycle - payment covers X days, next payment due in X days
+  B    // Keep original due date, remaining balance tracked
+}
+
+model PawnLoan {
+  id                    String      @id @default(cuid())
+  customerId            String      @map("customer_id")
+
+  // Item details
+  itemDescription       String      @map("item_description") @db.Text
+  itemCategory          String      @map("item_category")
+  serialNumber          String?     @map("serial_number")
+
+  // Loan amounts (all in cents)
+  principal             Int         // Amount loaned
+  monthlyInterestRate   Float       @map("monthly_interest_rate")  // e.g., 0.20 for 20%
+  storageFee            Int         @default(0) @map("storage_fee")
+
+  // Loan dates
+  startDate             DateTime    @default(now()) @map("start_date")
+  termEndDate           DateTime?   @map("term_end_date")  // startDate + 450 days (15 months)
+  nextPaymentDueDate    DateTime    @map("next_payment_due_date")
+  currentCycleStart     DateTime?   @map("current_cycle_start")
+
+  // First month tracking
+  firstMonthFeeOwed     Int         @default(0) @map("first_month_fee_owed")  // Remaining first month balance (cents)
+  firstMonthFeePaid     Boolean     @default(false) @map("first_month_fee_paid")
+
+  // Principal tracking (for principal-only period)
+  principalRemaining    Int         @map("principal_remaining")  // Track principal reduction
+
+  // Status
+  status                LoanStatus  @default(ACTIVE)
+  redeemedAt            DateTime?   @map("redeemed_at")
+  forfeitedAt           DateTime?   @map("forfeited_at")
+
+  createdAt             DateTime    @default(now()) @map("created_at")
+  updatedAt             DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  payments              LoanPayment[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([nextPaymentDueDate])
+  @@map("pawn_loans")
+}
+
+model LoanPayment {
+  id              String        @id @default(cuid())
+  loanId          String        @map("loan_id")
+
+  // Payment details (all amounts in cents)
+  amount          Int           // Amount paid
+  paymentMethod   PaymentMethod @map("payment_method")
+
+  // 15-month tracking
+  daysCovered     Int           @default(0) @map("days_covered")
+  cycleOption     CycleOption?  @map("cycle_option")  // "A" or "B" for partial payments
+  newDueDate      DateTime?     @map("new_due_date")  // Set if Option A chosen
+  remainingOwed   Int?          @map("remaining_owed")  // Set if Option B chosen (cents)
+
+  // What the payment applied to
+  appliedToFirstMonth   Int     @default(0) @map("applied_to_first_month")  // cents
+  appliedToInterest     Int     @default(0) @map("applied_to_interest")     // cents
+  appliedToPrincipal    Int     @default(0) @map("applied_to_principal")    // cents
+
+  // Payment context
+  loanDayAtPayment      Int     @map("loan_day_at_payment")  // Which day of the loan (1-450+)
+  periodAtPayment       String  @map("period_at_payment")    // "first_month", "interest_only", "principal_only"
+
+  notes           String?       @db.Text
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  loan            PawnLoan      @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@index([loanId])
+  @@index([createdAt])
+  @@map("loan_payments")
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text  // JSON-encoded value
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
 }
 
 // ==========================================
