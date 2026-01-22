@@ -1,6 +1,6 @@
 /**
  * eBay API Service
- * Handles OAuth authentication and sold listings search
+ * Handles sold listings search using the Finding API
  */
 
 // ==================== Types ====================
@@ -22,12 +22,6 @@ export interface EbaySearchResult {
   query: string;
 }
 
-interface EbayTokenResponse {
-  access_token: string;
-  expires_in: number;
-  token_type: string;
-}
-
 interface CacheEntry<T> {
   data: T;
   expiresAt: number;
@@ -35,23 +29,17 @@ interface CacheEntry<T> {
 
 // ==================== Configuration ====================
 
-const EBAY_OAUTH_URL = {
-  SANDBOX: 'https://api.sandbox.ebay.com/identity/v1/oauth2/token',
-  PRODUCTION: 'https://api.ebay.com/identity/v1/oauth2/token',
-};
-
-const EBAY_API_URL = {
-  SANDBOX: 'https://api.sandbox.ebay.com',
-  PRODUCTION: 'https://api.ebay.com',
+// Finding API endpoints (uses App ID directly, no OAuth needed)
+const EBAY_FINDING_API_URL = {
+  SANDBOX: 'https://svcs.sandbox.ebay.com/services/search/FindingService/v1',
+  PRODUCTION: 'https://svcs.ebay.com/services/search/FindingService/v1',
 };
 
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
-const TOKEN_BUFFER_MS = 60 * 1000; // Refresh token 1 minute before expiry
 
 // ==================== Cache ====================
 
 const searchCache = new Map<string, CacheEntry<EbaySearchResult>>();
-let tokenCache: CacheEntry<string> | null = null;
 
 /**
  * Clean expired entries from the search cache
@@ -68,7 +56,7 @@ function cleanExpiredCache(): void {
 // Run cache cleanup every 5 minutes
 setInterval(cleanExpiredCache, 5 * 60 * 1000);
 
-// ==================== OAuth Token Management ====================
+// ==================== Helper Functions ====================
 
 /**
  * Get eBay API environment from config
@@ -79,62 +67,21 @@ function getEnvironment(): 'SANDBOX' | 'PRODUCTION' {
 }
 
 /**
- * Get OAuth access token using Client Credentials flow
- * Tokens are cached until near expiration
+ * Get the App ID from environment
  */
-export async function getAccessToken(): Promise<string> {
-  // Check cached token
-  if (tokenCache && tokenCache.expiresAt > Date.now()) {
-    return tokenCache.data;
-  }
-
+function getAppId(): string {
   const appId = process.env.EBAY_APP_ID;
-  const certId = process.env.EBAY_CERT_ID;
-
-  if (!appId || !certId) {
-    throw new Error('eBay API credentials not configured (EBAY_APP_ID, EBAY_CERT_ID)');
+  if (!appId) {
+    throw new Error('eBay API credentials not configured (EBAY_APP_ID)');
   }
-
-  const environment = getEnvironment();
-  const oauthUrl = EBAY_OAUTH_URL[environment];
-
-  // Create Base64 encoded credentials
-  const credentials = Buffer.from(`${appId}:${certId}`).toString('base64');
-
-  const response = await fetch(oauthUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Authorization': `Basic ${credentials}`,
-    },
-    body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      scope: 'https://api.ebay.com/oauth/api_scope',
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('eBay OAuth error:', errorText);
-    throw new Error(`eBay OAuth failed: ${response.status}`);
-  }
-
-  const data = await response.json() as EbayTokenResponse;
-
-  // Cache the token with buffer time
-  tokenCache = {
-    data: data.access_token,
-    expiresAt: Date.now() + (data.expires_in * 1000) - TOKEN_BUFFER_MS,
-  };
-
-  return data.access_token;
+  return appId;
 }
 
 // ==================== Search Functions ====================
 
 /**
- * Search for recently sold items on eBay
- * Uses the Browse API with EBAY_SOLD filter
+ * Search for recently sold items on eBay using the Finding API
+ * Uses findCompletedItems operation which returns actual sold listings
  */
 export async function searchSoldItems(
   query: string,
@@ -157,49 +104,64 @@ export async function searchSoldItems(
     };
   }
 
-  // Get access token
-  const accessToken = await getAccessToken();
+  const appId = getAppId();
   const environment = getEnvironment();
-  const apiUrl = EBAY_API_URL[environment];
+  const apiUrl = EBAY_FINDING_API_URL[environment];
 
-  // Build search URL with filters for sold/completed items
-  // Using Browse API's search endpoint with filter for sold items
+  // Build Finding API URL for completed/sold items
+  // The Finding API uses query parameters and returns JSON
   const searchParams = new URLSearchParams({
-    q: normalizedQuery,
-    limit: String(Math.min(limit, 50)), // eBay max is 200, we cap at 50
-    filter: 'buyingOptions:{AUCTION},itemEndDate:[2024-01-01T00:00:00Z..]', // TODO(human): Implement sold items filter strategy
+    'OPERATION-NAME': 'findCompletedItems',
+    'SERVICE-VERSION': '1.13.0',
+    'SECURITY-APPNAME': appId,
+    'RESPONSE-DATA-FORMAT': 'JSON',
+    'REST-PAYLOAD': '',
+    'keywords': normalizedQuery,
+    'paginationInput.entriesPerPage': String(Math.min(limit, 100)),
+    // Filter: only sold items (not just completed/ended)
+    'itemFilter(0).name': 'SoldItemsOnly',
+    'itemFilter(0).value': 'true',
+    // Sort by end time (most recent first)
+    'sortOrder': 'EndTimeSoonest',
   });
 
-  const searchUrl = `${apiUrl}/buy/browse/v1/item_summary/search?${searchParams}`;
+  const searchUrl = `${apiUrl}?${searchParams}`;
 
   const response = await fetch(searchUrl, {
     method: 'GET',
     headers: {
-      'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
-      'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
     },
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('eBay search error:', errorText);
-
-    if (response.status === 401) {
-      // Token expired, clear cache and retry once
-      tokenCache = null;
-      throw new Error('eBay authentication failed - token expired');
-    }
-
+    console.error('eBay Finding API error:', errorText);
     throw new Error(`eBay search failed: ${response.status}`);
   }
 
-  const data = await response.json() as { itemSummaries?: any[] };
+  const data = await response.json() as FindingApiResponse;
 
-  // Map eBay response to our types
-  const items: EbaySoldItem[] = (data.itemSummaries || [])
+  // Check for API-level errors
+  const searchResponse = data.findCompletedItemsResponse?.[0];
+  if (!searchResponse) {
+    throw new Error('Invalid response from eBay Finding API');
+  }
+
+  const ack = searchResponse.ack?.[0];
+  if (ack === 'Failure') {
+    const errorMsg = searchResponse.errorMessage?.[0]?.error?.[0]?.message?.[0] || 'Unknown error';
+    console.error('eBay API error:', errorMsg);
+    throw new Error(`eBay API error: ${errorMsg}`);
+  }
+
+  // Extract items from response
+  const searchResultItems = searchResponse.searchResult?.[0]?.item || [];
+
+  // Map to our types
+  const items: EbaySoldItem[] = searchResultItems
     .slice(0, limit)
-    .map((item: any) => mapEbayItemToSoldItem(item));
+    .map((item: FindingApiItem) => mapFindingApiItemToSoldItem(item));
 
   const result: EbaySearchResult = {
     items,
@@ -217,33 +179,74 @@ export async function searchSoldItems(
   return result;
 }
 
+// ==================== Finding API Response Types ====================
+
+interface FindingApiResponse {
+  findCompletedItemsResponse?: [{
+    ack?: string[];
+    errorMessage?: [{
+      error?: [{
+        message?: string[];
+      }];
+    }];
+    searchResult?: [{
+      item?: FindingApiItem[];
+    }];
+  }];
+}
+
+interface FindingApiItem {
+  itemId?: string[];
+  title?: string[];
+  galleryURL?: string[];
+  viewItemURL?: string[];
+  sellingStatus?: [{
+    currentPrice?: [{
+      __value__?: string;
+      '@currencyId'?: string;
+    }];
+    sellingState?: string[];
+  }];
+  listingInfo?: [{
+    endTime?: string[];
+  }];
+  condition?: [{
+    conditionDisplayName?: string[];
+  }];
+}
+
 /**
- * Map eBay API response item to our EbaySoldItem type
+ * Map Finding API response item to our EbaySoldItem type
  */
-function mapEbayItemToSoldItem(item: any): EbaySoldItem {
+function mapFindingApiItemToSoldItem(item: FindingApiItem): EbaySoldItem {
   // Extract price in cents
   let soldPrice = 0;
-  if (item.price?.value) {
-    soldPrice = Math.round(parseFloat(item.price.value) * 100);
+  const priceValue = item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__;
+  if (priceValue) {
+    soldPrice = Math.round(parseFloat(priceValue) * 100);
   }
 
-  // Extract sold date (itemEndDate for completed auctions)
-  const soldDate = item.itemEndDate || item.itemCreationDate || new Date().toISOString();
+  // Extract sold date
+  const endTime = item.listingInfo?.[0]?.endTime?.[0];
+  const soldDate = endTime ? endTime.split('T')[0] : new Date().toISOString().split('T')[0];
 
-  // Get primary image
-  const imageUrl = item.image?.imageUrl || item.thumbnailImages?.[0]?.imageUrl || null;
+  // Get image URL
+  const imageUrl = item.galleryURL?.[0] || null;
 
-  // Map condition
-  const condition = item.condition || item.conditionDescription || null;
+  // Get condition
+  const condition = item.condition?.[0]?.conditionDisplayName?.[0] || null;
+
+  // Get item URL
+  const itemUrl = item.viewItemURL?.[0] || `https://www.ebay.com/itm/${item.itemId?.[0] || ''}`;
 
   return {
-    itemId: item.itemId || '',
-    title: item.title || 'Unknown Item',
+    itemId: item.itemId?.[0] || '',
+    title: item.title?.[0] || 'Unknown Item',
     soldPrice,
-    soldDate: soldDate.split('T')[0], // Just the date part
+    soldDate,
     imageUrl,
     condition,
-    itemUrl: item.itemWebUrl || `https://www.ebay.com/itm/${item.itemId}`,
+    itemUrl,
   };
 }
 
@@ -252,15 +255,13 @@ function mapEbayItemToSoldItem(item: any): EbaySoldItem {
  */
 export function clearCache(): void {
   searchCache.clear();
-  tokenCache = null;
 }
 
 /**
  * Get cache statistics (useful for monitoring)
  */
-export function getCacheStats(): { searchEntries: number; hasToken: boolean } {
+export function getCacheStats(): { searchEntries: number } {
   return {
     searchEntries: searchCache.size,
-    hasToken: tokenCache !== null && tokenCache.expiresAt > Date.now(),
   };
 }

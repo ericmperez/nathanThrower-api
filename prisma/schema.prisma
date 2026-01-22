@@ -774,6 +774,30 @@ model SystemSetting {
 }
 
 // ==========================================
+// AUDIT LOG SYSTEM (General Purpose)
+// ==========================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?  // Nullable for system actions or failed logins
+  action     String   // LOGIN_SUCCESS, LOGIN_FAILURE, CREATE, UPDATE, DELETE, etc.
+  entityType String?  // User, PawnLoan, LoanPayment, etc.
+  entityId   String?  // ID of the affected entity
+  oldValue   Json?    // Previous state (for updates/deletes)
+  newValue   Json?    // New state (for creates/updates)
+  ipAddress  String?
+  userAgent  String?
+  metadata   Json?    // Additional context
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ==========================================
 // CONTENT (TIP OF THE WEEK, etc.)
 // ==========================================
 

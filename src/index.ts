@@ -18,7 +18,10 @@ import workoutsRoutes from './routes/workouts';
 import trainingProgramsRoutes from './routes/trainingPrograms';
 import contentRoutes from './routes/content';
 import pawnsRoutes from './routes/pawns';
+import auditLogsRoutes from './routes/auditLogs';
+import ebayRoutes from './routes/ebay';
 import { errorHandler } from './middleware/errorHandler';
+import { ipAddressMiddleware } from './middleware/ipAddress';
 import { initWebSocket } from './lib/websocket';
 
 dotenv.config();
@@ -59,10 +62,11 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Device-Id'],
 }));
 app.use(morgan('dev'));
 app.use(express.json());
+app.use(ipAddressMiddleware); // Extract client IP for audit logging
 
 // Health check
 app.get('/health', (req, res) => {
@@ -85,6 +89,8 @@ app.use('/api/workouts', workoutsRoutes);
 app.use('/api/training-programs', trainingProgramsRoutes);
 app.use('/api/content', contentRoutes);
 app.use('/api/pawns', pawnsRoutes);
+app.use('/api/audit-logs', auditLogsRoutes);
+app.use('/api/ebay', ebayRoutes);
 
 // Error handler
 app.use(errorHandler);

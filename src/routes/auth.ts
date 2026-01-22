@@ -6,6 +6,7 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { authRateLimit } from '../middleware/rateLimit';
 import { broadcastUserCreated } from '../lib/websocket';
 import { generatePresignedUploadUrl } from '../lib/s3';
+import { auditService } from '../services/audit';
 import {
   registerUser,
   loginUser,
@@ -71,16 +72,42 @@ router.post('/login', authRateLimit, async (req, res, next) => {
   try {
     const deviceId = req.headers['x-device-id'] as string | undefined;
     const ipAddress = getIpAddress(req);
+    const userAgent = req.headers['user-agent'];
     const authResponse = await loginUser(req.body, deviceId, ipAddress);
+
+    // Log successful login to audit log
+    await auditService.logLoginSuccess(authResponse.user.id, {
+      ipAddress,
+      userAgent,
+      metadata: { deviceId },
+    });
+
     res.json(authResponse);
   } catch (error: any) {
+    const ipAddress = getIpAddress(req);
+    const userAgent = req.headers['user-agent'];
+
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors[0].message });
     }
     if (error.message === 'Invalid credentials') {
+      // Log failed login attempt
+      await auditService.logLoginFailure({
+        ipAddress,
+        userAgent,
+        email: req.body?.email,
+        reason: 'Invalid credentials',
+      });
       return res.status(401).json({ error: error.message });
     }
     if (error.message.includes('locked')) {
+      // Log account locked attempt
+      await auditService.logLoginFailure({
+        ipAddress,
+        userAgent,
+        email: req.body?.email,
+        reason: 'Account locked',
+      });
       return res.status(423).json({ error: error.message });
     }
     next(error);
@@ -111,7 +138,15 @@ router.post('/logout', authenticate, async (req: AuthRequest, res, next) => {
   try {
     const { refreshToken } = req.body;
     const ipAddress = getIpAddress(req);
+    const userAgent = req.headers['user-agent'];
     await logoutUser(req.user!.userId, refreshToken, ipAddress);
+
+    // Log logout to audit log
+    await auditService.logLogout(req.user!.userId, {
+      ipAddress,
+      userAgent,
+    });
+
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
     next(error);
@@ -122,7 +157,15 @@ router.post('/logout', authenticate, async (req: AuthRequest, res, next) => {
 router.post('/logout-all', authenticate, async (req: AuthRequest, res, next) => {
   try {
     const ipAddress = getIpAddress(req);
+    const userAgent = req.headers['user-agent'];
     await logoutAllDevices(req.user!.userId, ipAddress);
+
+    // Log logout all to audit log
+    await auditService.logLogoutAll(req.user!.userId, {
+      ipAddress,
+      userAgent,
+    });
+
     res.json({ message: 'Logged out from all devices' });
   } catch (error) {
     next(error);
@@ -595,7 +638,7 @@ router.post('/oauth/google', authRateLimit, async (req, res, next) => {
       },
     });
 
-    // Log auth event
+    // Log auth event to AuthAuditLog (legacy)
     await prisma.authAuditLog.create({
       data: {
         userId: user.id,
@@ -604,6 +647,13 @@ router.post('/oauth/google', authRateLimit, async (req, res, next) => {
         metadata: { provider: 'google', deviceId },
       },
     }).catch(() => { }); // Don't fail if logging fails
+
+    // Log to new audit system
+    await auditService.logOAuthLogin(user.id, 'google', {
+      ipAddress,
+      userAgent: req.headers['user-agent'],
+      metadata: { deviceId },
+    });
 
     // Broadcast new user if this is a registration
     if (user.createdAt.getTime() > Date.now() - 5000) {
@@ -678,7 +728,7 @@ router.post('/oauth/apple', authRateLimit, async (req, res, next) => {
       },
     });
 
-    // Log auth event
+    // Log auth event to AuthAuditLog (legacy)
     await prisma.authAuditLog.create({
       data: {
         userId: user.id,
@@ -687,6 +737,13 @@ router.post('/oauth/apple', authRateLimit, async (req, res, next) => {
         metadata: { provider: 'apple', deviceId },
       },
     }).catch(() => { }); // Don't fail if logging fails
+
+    // Log to new audit system
+    await auditService.logOAuthLogin(user.id, 'apple', {
+      ipAddress,
+      userAgent: req.headers['user-agent'],
+      metadata: { deviceId },
+    });
 
     // Broadcast new user if this is a registration
     if (user.createdAt.getTime() > Date.now() - 5000) {
