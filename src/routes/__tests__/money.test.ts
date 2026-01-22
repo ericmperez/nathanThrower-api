@@ -17,7 +17,7 @@ import {
   DAYS_PER_MONTH,
   TERM_MONTHS,
   PawnLoanData,
-} from '@pitchcoach/shared';
+} from '../../lib/money';
 
 // Helper to create a test loan
 function createTestLoan(overrides: Partial<PawnLoanData> = {}): PawnLoanData {

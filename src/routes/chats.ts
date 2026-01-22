@@ -5,7 +5,7 @@ import {
   CreateDirectChatSchema,
   CreateGroupChatSchema,
   UpdateGroupChatSchema,
-} from '@pitchcoach/shared';
+} from '../lib/sharedTypes';
 import {
   broadcastChatCreated,
   broadcastChatParticipantAdded,
@@ -319,7 +319,7 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
       // Filter out existing participants
       const existingUserIds = chat.participants.map(p => p.userId);
       const newParticipantIds = body.addParticipantIds.filter(
-        id => !existingUserIds.includes(id)
+        (id: string) => !existingUserIds.includes(id)
       );
 
       if (newParticipantIds.length > 0) {
@@ -345,7 +345,7 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
     // Remove participants
     if (body.removeParticipantIds && body.removeParticipantIds.length > 0) {
       // Can't remove yourself through this endpoint
-      const idsToRemove = body.removeParticipantIds.filter(id => id !== userId);
+      const idsToRemove = body.removeParticipantIds.filter((id: string) => id !== userId);
 
       for (const removeId of idsToRemove) {
         await prisma.chatParticipant.updateMany({

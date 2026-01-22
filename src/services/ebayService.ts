@@ -119,7 +119,7 @@ export async function getAccessToken(): Promise<string> {
     throw new Error(`eBay OAuth failed: ${response.status}`);
   }
 
-  const data: EbayTokenResponse = await response.json();
+  const data = await response.json() as EbayTokenResponse;
 
   // Cache the token with buffer time
   tokenCache = {
@@ -194,7 +194,7 @@ export async function searchSoldItems(
     throw new Error(`eBay search failed: ${response.status}`);
   }
 
-  const data = await response.json();
+  const data = await response.json() as { itemSummaries?: any[] };
 
   // Map eBay response to our types
   const items: EbaySoldItem[] = (data.itemSummaries || [])

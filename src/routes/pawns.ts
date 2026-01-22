@@ -6,6 +6,9 @@ import {
   PaymentPreviewSchema,
   PartialPaymentSchema,
   RedeemLoanSchema,
+  ForfeitureSettings,
+} from '../lib/sharedTypes';
+import {
   calculate15MonthPayoff,
   calculatePartialPaymentOptions,
   applyPayment,
@@ -17,8 +20,7 @@ import {
   TERM_DAYS,
   DAYS_PER_MONTH,
   PawnLoanData,
-  ForfeitureSettings,
-} from '@pitchcoach/shared';
+} from '../lib/money';
 
 const router = Router();
 const prisma = new PrismaClient();

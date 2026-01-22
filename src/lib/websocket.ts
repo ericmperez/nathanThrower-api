@@ -9,7 +9,7 @@ import {
   SocketMessagePayload,
   SocketReadReceiptPayload,
   SocketTypingPayload,
-} from '@pitchcoach/shared';
+} from './sharedTypes';
 
 let io: SocketIOServer | null = null;
 
@@ -222,7 +222,7 @@ export function initWebSocket(server: HttpServer) {
 
         // Create read receipts
         await prisma.chatMessageReceipt.createMany({
-          data: messageIds.map(messageId => ({
+          data: messageIds.map((messageId: string) => ({
             messageId,
             userId: socket.userId!,
             readAt: now,

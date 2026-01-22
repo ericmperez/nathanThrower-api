@@ -3,7 +3,7 @@
  */
 import request from 'supertest';
 import express from 'express';
-import { addDays, DAYS_PER_MONTH, TERM_DAYS } from '@pitchcoach/shared';
+import { addDays, DAYS_PER_MONTH, TERM_DAYS } from '../../lib/money';
 
 // Create mock objects that will be used in the mock factory
 const mockPawnLoan = {
